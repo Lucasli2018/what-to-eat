@@ -181,6 +181,16 @@
   @keyframes pulse{0%,100%{box-shadow:0 8px 22px rgba(255,107,53,.4),inset 0 2px 4px rgba(255,255,255,.4);}50%{box-shadow:0 8px 32px rgba(255,107,53,.75),inset 0 2px 4px rgba(255,255,255,.4);}}
   .toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);background:rgba(45,33,24,.92);color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:80vw;text-align:center;}
   .toast.show{opacity:1;transform:translate(-50%,0);}
+
+  /* 命运懂你 · 偏好画像 */
+  .profile{margin-top:14px;background:linear-gradient(135deg,rgba(255,107,53,.09),rgba(255,161,82,.04));
+    border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow-panel);}
+  .pp-sub{font-size:11px;color:var(--text2);font-weight:600;margin-left:6px;}
+  .pp-top{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
+  .pp-chip{display:inline-flex;align-items:center;gap:5px;background:rgba(255,107,53,.13);
+    border:1px solid rgba(255,107,53,.28);border-radius:999px;padding:4px 11px;font-size:13px;font-weight:700;color:var(--primary);}
+  .pp-insight{color:var(--text2);font-size:12.5px;line-height:1.5;}
+  .pp-empty{color:var(--text2);font-size:13px;}
 </style>
 </head>
 <body>
@@ -256,6 +266,11 @@
         <button class="btn ghost2" id="favBtn">⭐ 收藏</button>
       </div>
     </div>
+  </div>
+
+  <div class="profile" id="profile">
+    <div class="section-title">命运懂你 <span class="pp-sub">越转越准</span></div>
+    <div class="profile-body" id="profileBody"></div>
   </div>
 
   <div class="history">
@@ -368,6 +383,7 @@ const HISTORY_KEY = 'eat-history-v1';
 const SEEN_KEY = 'eat-seen-v1';
 const CUSTOM_KEY = 'eat-custom-v1';
 const FAV_KEY = 'eat-fav-v1';
+const PREF_KEY = 'eat-pref-v1';
 
 /* ---------- 状态 ---------- */
 let state = {
@@ -399,6 +415,8 @@ function loadCustom(){ try{return JSON.parse(localStorage.getItem(CUSTOM_KEY)||'
 function saveCustom(a){ try{localStorage.setItem(CUSTOM_KEY,JSON.stringify(a));}catch(e){} }
 function loadFav(){ try{return JSON.parse(localStorage.getItem(FAV_KEY)||'[]');}catch(e){return [];} }
 function saveFav(a){ try{localStorage.setItem(FAV_KEY,JSON.stringify(a));}catch(e){} }
+function loadPref(){ try{const o=JSON.parse(localStorage.getItem(PREF_KEY)||'{}');return {pick:o.pick||{},skip:o.skip||{}};}catch(e){return {pick:{},skip:{}};} }
+function savePref(o){ try{localStorage.setItem(PREF_KEY,JSON.stringify(o));}catch(e){} }
 function allFoods(){ return FOODS.concat(loadCustom()); }
 
 /* ---------- 时段 ---------- */
@@ -460,14 +478,42 @@ function buildPool(slot){
 }
 
 /* 从候选池挑最多 MAX_WHEEL 个放转盘：最近吃过的靠后（权重 1/(1+seen)），收藏的加权 */
+/* 大类：用于搭配多样性判断 */
+function catOf(f){
+  if(f.t.includes('海鲜')) return '海鲜';
+  if(f.t.includes('素')) return '素';
+  if(f.t.includes('面')) return '主食';
+  return '荤';
+}
+/* 上一顿的大类（基于历史第一条） */
+function lastMealCat(){
+  const h = loadHistory();
+  if(h.length===0) return null;
+  const f = allFoods().find(o=>o.n===h[0].n);
+  return f ? catOf(f) : null;
+}
+
+/* 从候选池挑最多 MAX_WHEEL 个放转盘：综合偏好/收藏/近期去重/搭配 */
 function pickWheel(slot){
   const pool = buildPool(slot);
   if(pool.length===0) return [];
   const seen = loadSeen();
   const fav = loadFav();
+  const pref = loadPref();
+  const lastCat = lastMealCat();
   const ranked = pool.map(f=>{
-    let w = 1/(1+(seen[f.n]||0)) + Math.random()*0.3;
+    let w = 1;
+    // 偏好：被选中多、被换掉少 → 加权（tanh 平滑，避免单点爆炸）
+    const score = (pref.pick[f.n]||0) - 0.6*(pref.skip[f.n]||0);
+    w *= 1 + 0.45*Math.tanh(score);
+    // 收藏常去
     if(fav.includes(f.n)) w *= 1.8;
+    // 近期吃过降权（比旧逻辑更陡，促进轮换）
+    w *= 1/(1+(seen[f.n]||0)*0.7);
+    // 搭配：与上一顿同类则降权，促进荤素/类型交替
+    if(lastCat && catOf(f)===lastCat) w *= 0.6;
+    // 小抖动防完全固化
+    w *= 0.85 + Math.random()*0.3;
     return {f, w};
   }).sort((a,b)=>b.w-a.w);
   return ranked.slice(0, Math.min(MAX_WHEEL, ranked.length)).map(x=>x.f);
@@ -673,6 +719,11 @@ function finish(idx){
   // 记录 seen / history
   const seen = loadSeen(); seen[f.n]=(seen[f.n]||0)+1; saveSeen(seen);
   pushHistory(f);
+  // 记录正向偏好（最终选中的）
+  const pref = loadPref();
+  pref.pick[f.n] = (pref.pick[f.n]||0)+1;
+  savePref(pref);
+  renderProfile();
   updateRerollBtn();
   updateFavBtn();
   hintEl.textContent='就它了，别犹豫！';
@@ -707,7 +758,17 @@ function reasonFor(f){
     night:'深夜解个馋，'
   };
   const tail = ['这顿稳了。','别犹豫了就它。','转盘选的，怪不到你头上。','今天命运站它。','吃就完事了。'];
-  return sr[state.scene] + tr[timeSlot()] + tail[Math.floor(Math.random()*tail.length)];
+  // 搭配建议（基于上一顿大类，与当前菜互补）
+  let comboTip = '';
+  const last = lastMealCat();
+  if(last){
+    const cur = catOf(f);
+    if(last==='荤' && cur!=='荤') comboTip='刚好和上一顿错开，荤素搭配更舒服。';
+    else if(last==='素' && cur==='荤') comboTip='这顿补点肉，均衡一下。';
+    else if(last==='海鲜' && cur!=='海鲜') comboTip='换换口味，今天不整海鲜了。';
+    else if(last===cur) comboTip='又是'+last+'，连着两顿同口儿，介意就换一个。';
+  }
+  return sr[state.scene] + tr[timeSlot()] + comboTip + tail[Math.floor(Math.random()*tail.length)];
 }
 
 /* ---------- 历史 ---------- */
@@ -736,6 +797,24 @@ function renderHistory(){
   });
 }
 
+/* ---------- 命运懂你 · 偏好画像 ---------- */
+function renderProfile(){
+  const el = $('#profileBody');
+  const pref = loadPref();
+  const entries = Object.keys(pref.pick||{}).map(n=>({n, p:pref.pick[n]})).sort((a,b)=>b.p-a.p);
+  const top = entries.slice(0,3);
+  if(top.length===0){ el.innerHTML = '<span class="pp-empty">还没转够次数，命运正在认识你…多转几顿它就懂你了 🐴</span>'; return; }
+  const all = FOODS.concat(loadCustom());
+  const liked = top.map(t=>all.find(o=>o.n===t.n)).filter(Boolean);
+  let insight = '你最常选：'+top.map(t=>t.n).join('、')+'。';
+  const spicy = liked.reduce((s,f)=>s+f.s,0)/liked.length;
+  if(spicy>=2) insight += '看来是重口味星人 🌶️';
+  else if(spicy===0) insight += '偏好清淡 🥗';
+  else insight += '口味适中，不挑辣。';
+  el.innerHTML = '<div class="pp-top">'+top.map(t=>'<span class="pp-chip">'+t.n+' ×'+t.p+'</span>').join('')+'</div>'+
+    '<div class="pp-insight">'+insight+'</div>';
+}
+
 /* ---------- 换一个（限次） ---------- */
 function updateRerollBtn(){
   if(state.rerollLeft<=0){
@@ -749,6 +828,10 @@ function updateRerollBtn(){
 rerollBtn.addEventListener('click',()=>{
   if(state.spinning || state.rerollLeft<=0 || !state.lastResultId) return;
   state.rerollLeft--;
+  // 记录负反馈（被换掉的 = 不太想吃）
+  const pf = loadPref();
+  pf.skip[state.lastResultId] = (pf.skip[state.lastResultId]||0)+1;
+  savePref(pf);
   updateRerollBtn();
   spin(state.lastResultId);
 });
@@ -907,6 +990,7 @@ function init(){
   setupCanvas();
   refreshWheel();
   updateRerollBtn();
+  renderProfile();
 }
 init();
 </script>
