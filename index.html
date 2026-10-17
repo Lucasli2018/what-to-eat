@@ -161,6 +161,8 @@
   .btn.ghost2{background:var(--bg);color:var(--text2);box-shadow:inset 0 0 0 1px var(--line);}
   .btn.ghost2:hover:not(:disabled){color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary);}
   .btn.ghost2.faved{color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary);background:var(--accent-soft);}
+  .backup-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .backup-row .btn.ghost2{flex:1;min-width:130px;}
   .btn:disabled{opacity:.55;cursor:default;}
 
   /* History */
@@ -191,6 +193,19 @@
     border:1px solid rgba(255,107,53,.28);border-radius:999px;padding:4px 11px;font-size:13px;font-weight:700;color:var(--primary);}
   .pp-insight{color:var(--text2);font-size:12.5px;line-height:1.5;}
   .pp-empty{color:var(--text2);font-size:13px;}
+
+  /* 吃货复盘 */
+  .recap{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:14px 16px;box-shadow:var(--shadow-panel);}
+  .recap-canvas{display:flex;gap:14px;align-items:center;margin-top:10px;}
+  .recap-chart{width:118px;height:118px;flex:0 0 118px;border-radius:50%;}
+  .recap-stats{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:9px 12px;}
+  .stat{display:flex;flex-direction:column;}
+  .stat b{font-size:18px;font-weight:800;color:var(--text);line-height:1.1;}
+  .stat span{font-size:11.5px;color:var(--text2);margin-top:2px;}
+  .recap-legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:12px;font-size:12px;color:var(--text2);}
+  .recap-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:middle;}
+  .recap-empty{color:var(--text2);font-size:13px;margin-top:8px;line-height:1.6;}
 </style>
 </head>
 <body>
@@ -240,6 +255,14 @@
         </div>
       </div>
     </div>
+    <div class="field">
+      <div class="field-label">数据备份 <span class="pp-sub">都在本地，可导出带走</span></div>
+      <div class="backup-row">
+        <button class="btn ghost2" id="exportBtn">💾 导出备份</button>
+        <button class="btn ghost2" id="importBtn">📂 导入备份</button>
+        <input type="file" id="importFile" accept="application/json,.json" style="display:none" />
+      </div>
+    </div>
   </div>
 
   <div class="stage">
@@ -276,6 +299,11 @@
   <div class="history">
     <div class="section-title">最近吃过 <span class="clear" id="clearHistory">清空</span></div>
     <div class="history-list" id="historyList"></div>
+  </div>
+
+  <div class="recap">
+    <div class="section-title">吃货复盘 <span class="pp-sub">数据都在本地</span></div>
+    <div id="recapBody"></div>
   </div>
 
   <div class="foot">转盘替你做的决定，后悔也怪不到你头上 🐴</div>
@@ -380,6 +408,7 @@ const SLICE_COLORS = ['#ff6b35','#ffa552','#ffd166','#f4845f','#e76f51','#f4a261
 const MAX_REROLL = 2;
 const MAX_WHEEL = 8;
 const HISTORY_KEY = 'eat-history-v1';
+const LOG_KEY = 'eat-log-v1';
 const SEEN_KEY = 'eat-seen-v1';
 const CUSTOM_KEY = 'eat-custom-v1';
 const FAV_KEY = 'eat-fav-v1';
@@ -773,12 +802,16 @@ function reasonFor(f){
 
 /* ---------- 历史 ---------- */
 function loadHistory(){ try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');}catch(e){return [];} }
+function saveHistory(h){ try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h));}catch(e){} }
+function loadLog(){ try{return JSON.parse(localStorage.getItem(LOG_KEY)||'[]');}catch(e){return [];} }
+function saveLog(a){ try{localStorage.setItem(LOG_KEY,JSON.stringify(a.slice(-300)));}catch(e){} }
 function pushHistory(f){
+  const rec = {n:f.n, e:f.e, p:f.p, cat:catOf(f), at:Date.now()};
   let h = loadHistory().filter(x=>x.n!==f.n);
-  h.unshift({n:f.n,e:f.e});
-  h = h.slice(0,20);
-  try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h));}catch(e){}
-  renderHistory();
+  h.unshift(rec); h = h.slice(0,20);
+  saveHistory(h);
+  const log = loadLog(); log.push(rec); saveLog(log);
+  renderHistory(); renderRecap();
 }
 function renderHistory(){
   const list = $('#historyList');
@@ -790,8 +823,9 @@ function renderHistory(){
       const f=allFoods().find(o=>o.n===el.dataset.n);
       if(!f) return;
       state.lastResultId=f.n;
-      let hh=loadHistory().filter(o=>o.n!==f.n); hh.unshift({n:f.n,e:f.e});
-      try{localStorage.setItem(HISTORY_KEY,JSON.stringify(hh.slice(0,20)));}catch(e){}
+      let hh=loadHistory().filter(o=>o.n!==f.n);
+      hh.unshift({n:f.n,e:f.e,p:f.p,cat:catOf(f),at:Date.now()});
+      saveHistory(hh.slice(0,20));
       showResult(f); toast('再看一眼：'+f.n);
     });
   });
@@ -813,6 +847,63 @@ function renderProfile(){
   else insight += '口味适中，不挑辣。';
   el.innerHTML = '<div class="pp-top">'+top.map(t=>'<span class="pp-chip">'+t.n+' ×'+t.p+'</span>').join('')+'</div>'+
     '<div class="pp-insight">'+insight+'</div>';
+}
+
+/* ---------- 吃货复盘 ---------- */
+const CAT_COLORS = {'荤':'#ff6b35','素':'#4caf50','海鲜':'#2196f3','主食':'#ffb300'};
+function renderRecap(){
+  const el = $('#recapBody');
+  const log = loadLog();
+  if(log.length===0){
+    el.innerHTML = '<div class="recap-empty">还没数据。每转一顿，这里就会长出你的「吃饭地图」——<br>类别分布、花了多少钱、最近吃啥，一眼看清 📊</div>';
+    return;
+  }
+  const cats = {'荤':0,'素':0,'海鲜':0,'主食':0};
+  let total=0, last7=0; const now=Date.now(); const WEEK=7*864e5;
+  const freq={};
+  log.forEach(r=>{
+    const c = CAT_COLORS[r.cat]?r.cat:'荤';
+    cats[c]++; total += (r.p||0);
+    if(r.at && now-r.at < WEEK) last7++;
+    freq[r.n]=(freq[r.n]||0)+1;
+  });
+  const fav = Object.keys(freq).sort((a,b)=>freq[b]-freq[a])[0];
+  const segs = Object.keys(CAT_COLORS).filter(c=>cats[c]>0).map(c=>({c,n:cats[c]}));
+  const sum = segs.reduce((s,x)=>s+x.n,0);
+  el.innerHTML =
+    '<div class="recap-canvas">'+
+      '<canvas class="recap-chart" id="recapChart"></canvas>'+
+      '<div class="recap-stats">'+
+        '<div class="stat"><b>'+log.length+'</b><span>累计顿数</span></div>'+
+        '<div class="stat"><b>¥'+total+'</b><span>累计花费</span></div>'+
+        '<div class="stat"><b>'+last7+'</b><span>近 7 天</span></div>'+
+        '<div class="stat"><b style="font-size:15px">'+fav+'</b><span>最常吃的</span></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="recap-legend">'+segs.map(s=>'<span><i style="background:'+CAT_COLORS[s.c]+'"></i>'+s.c+' '+s.n+' 顿 ('+Math.round(s.n/sum*100)+'%)</span>').join('')+'</div>';
+  drawRecapChart($('#recapChart'), segs, sum);
+}
+function drawRecapChart(canvas, segs, sum){
+  const dpr = window.devicePixelRatio||1;
+  const size = 118;
+  canvas.width = size*dpr; canvas.height = size*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,size,size);
+  const cx=size/2, cy=size/2, r=size/2-4;
+  if(sum===0) return;
+  let a0=-Math.PI/2;
+  segs.forEach(s=>{
+    const a1=a0 + s.n/sum*Math.PI*2;
+    ctx.beginPath(); ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,a0,a1); ctx.closePath();
+    ctx.fillStyle=CAT_COLORS[s.c]; ctx.fill();
+    a0=a1;
+  });
+  // 中心留白形成圆环
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.55,0,Math.PI*2);
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--panel').trim()||'#fff';
+  ctx.fill();
 }
 
 /* ---------- 换一个（限次） ---------- */
@@ -964,8 +1055,8 @@ $('#resetBtn').addEventListener('click',()=>{
   hintEl.textContent='点击中间按钮，让命运做决定';
 });
 $('#clearHistory').addEventListener('click',()=>{
-  try{localStorage.removeItem(HISTORY_KEY);}catch(e){}
-  renderHistory();
+  try{localStorage.removeItem(HISTORY_KEY);localStorage.removeItem(LOG_KEY);}catch(e){}
+  renderHistory(); renderRecap();
 });
 spinBtn.addEventListener('click',()=>spin(null));
 
@@ -977,6 +1068,46 @@ soundBtn.addEventListener('click',()=>{
   try{ localStorage.setItem('eat-sound',soundOn?'1':'0'); }catch(e){}
   renderSoundBtn(); if(soundOn) ensureAudio();
 });
+
+/* ---------- 数据备份 / 恢复 ---------- */
+function exportData(){
+  const data = {
+    app:'what-to-eat', ver:1, exportedAt:new Date().toISOString(),
+    custom:loadCustom(), fav:loadFav(), pref:loadPref(),
+    history:loadHistory(), log:loadLog(), seen:loadSeen(),
+    sound: soundOn?'1':'0'
+  };
+  try{
+    const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='what-to-eat-backup-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},200);
+    toast('已导出备份 💾');
+  }catch(e){ toast('导出失败'); }
+}
+function importData(file){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const d=JSON.parse(reader.result);
+      if(d.custom) saveCustom(d.custom);
+      if(d.fav) saveFav(d.fav);
+      if(d.pref) savePref(d.pref);
+      if(d.history) saveHistory(d.history);
+      if(d.log) saveLog(d.log);
+      if(d.seen) saveSeen(d.seen);
+      if(d.sound!==undefined){ soundOn=d.sound==='1'; try{localStorage.setItem('eat-sound',d.sound);}catch(e){} renderSoundBtn(); }
+      renderCustomList(); renderHistory(); renderProfile(); renderRecap(); refreshWheel();
+      toast('备份已恢复 📂');
+    }catch(e){ toast('文件格式不对，恢复失败'); }
+  };
+  reader.readAsText(file);
+}
+$('#exportBtn').addEventListener('click',exportData);
+$('#importBtn').addEventListener('click',()=>$('#importFile').click());
+$('#importFile').addEventListener('change',function(){ if(this.files&&this.files[0]) importData(this.files[0]); this.value=''; });
 
 /* ---------- 初始化 ---------- */
 window.addEventListener('resize',setupCanvas);
@@ -991,6 +1122,7 @@ function init(){
   refreshWheel();
   updateRerollBtn();
   renderProfile();
+  renderRecap();
 }
 init();
 </script>
