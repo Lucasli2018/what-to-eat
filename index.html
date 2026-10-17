@@ -425,41 +425,72 @@ function drawWheel(){
     return;
   }
   const seg = (Math.PI*2)/N;
-  const r = size/2 - 4;
+  const r = size/2 - 8;
   ctx.save();
   ctx.translate(size/2,size/2);
+
+  // 扇区（随转盘旋转）
+  ctx.save();
   ctx.rotate(state.rotation);
   for(let i=0;i<N;i++){
     const a0=i*seg, a1=(i+1)*seg;
-    const mid=(a0+a1)/2;
     ctx.beginPath();
     ctx.moveTo(0,0);
     ctx.arc(0,0,r,a0,a1);
     ctx.closePath();
     ctx.fillStyle = SLICE_COLORS[i%SLICE_COLORS.length];
     ctx.fill();
-    // 文字
+    ctx.strokeStyle='rgba(255,255,255,.85)';
+    ctx.lineWidth=2;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 外圈描边
+  ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);
+  ctx.strokeStyle='rgba(255,255,255,.95)';ctx.lineWidth=5;ctx.stroke();
+
+  // 文字：屏幕水平 upright，落在扇区重心，绝不旋转/重叠
+  for(let i=0;i<N;i++){
+    const f = state.wheelFoods[i];
+    const mid = i*seg + seg/2 + state.rotation;
+    const rr = r*0.62;
+    const x = Math.cos(mid)*rr;
+    const y = Math.sin(mid)*rr;
+    const base = SLICE_COLORS[i%SLICE_COLORS.length];
+    const avail = 2*rr*Math.sin(seg/2) - 10; // 扇区弦宽可用空间
     ctx.save();
-    ctx.rotate(mid);
-    ctx.fillStyle='#fff';
-    ctx.font='800 14px -apple-system,"PingFang SC",sans-serif';
+    ctx.textAlign='center';
     ctx.textBaseline='middle';
-    const label = state.wheelFoods[i].e+' '+state.wheelFoods[i].n;
-    if(mid>Math.PI/2 && mid<Math.PI*1.5){
-      ctx.rotate(Math.PI);
-      ctx.textAlign='left';
-      // 截断过长名字
-      ctx.fillText(trunc(label, 7), 14, 0);
-    }else{
-      ctx.textAlign='right';
-      ctx.fillText(trunc(label, 7), r-14, 0);
+    // emoji
+    ctx.font='16px -apple-system,"PingFang SC",sans-serif';
+    ctx.fillStyle = textColorFor(base);
+    ctx.fillText(f.e, x, y-10);
+    // 菜名：自适应字号，超长截断
+    let fs=13;
+    ctx.font='800 '+fs+'px -apple-system,"PingFang SC",sans-serif';
+    let name=f.n;
+    while(ctx.measureText(name).width>avail && fs>10){
+      fs--;
+      ctx.font='800 '+fs+'px -apple-system,"PingFang SC",sans-serif';
     }
+    if(ctx.measureText(name).width>avail) name=trunc(name,4);
+    if(textColorFor(base)==='#fff'){
+      ctx.shadowColor='rgba(0,0,0,.28)';
+      ctx.shadowBlur=3;
+      ctx.shadowOffsetY=1;
+    }
+    ctx.fillText(name, x, y+10);
     ctx.restore();
   }
-  // 内圈
-  ctx.beginPath();ctx.arc(0,0,40,0,Math.PI*2);
-  ctx.fillStyle='rgba(255,255,255,.9)';ctx.fill();
   ctx.restore();
+}
+/* 按扇区底色亮度自动选深/浅文字色，保证对比度 */
+function textColorFor(hex){
+  const c=parseInt(hex.slice(1),16);
+  const R=(c>>16)&255, G=(c>>8)&255, B=c&255;
+  const lum=0.299*R+0.587*G+0.114*B;
+  return lum>178 ? '#6b3f1d' : '#ffffff';
 }
 function trunc(s,n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
 
