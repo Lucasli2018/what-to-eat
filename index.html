@@ -206,6 +206,45 @@
   .recap-legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:12px;font-size:12px;color:var(--text2);}
   .recap-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:middle;}
   .recap-empty{color:var(--text2);font-size:13px;margin-top:8px;line-height:1.6;}
+
+  /* 本周菜单 */
+  .week{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:14px 16px;box-shadow:var(--shadow-panel);}
+  .week-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .week-head .section-title{margin:0;}
+  .week-gen{background:var(--bg);color:var(--primary);border:none;border-radius:999px;
+    padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:inset 0 0 0 1px var(--primary);white-space:nowrap;}
+  .week-gen:active{transform:scale(.96);}
+  .week-day{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px dashed var(--line);}
+  .week-day:first-of-type{border-top:none;}
+  .week-dname{width:48px;flex:0 0 48px;font-size:13px;font-weight:800;color:var(--text);line-height:1.25;}
+  .week-dname small{display:block;font-size:10.5px;font-weight:600;color:var(--text2);}
+  .week-badge{display:inline-block;background:var(--primary);color:#fff;font-size:9px;font-weight:800;
+    padding:1px 5px;border-radius:6px;margin-top:2px;}
+  .week-dishes{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:26px;}
+  .week-empty{font-size:12px;color:var(--text2);}
+  .wdish{display:inline-flex;align-items:center;gap:4px;background:rgba(255,107,53,.12);
+    color:var(--text);border-radius:999px;padding:3px 4px 3px 9px;font-size:12px;font-weight:700;white-space:nowrap;}
+  .wdish .x{margin-left:1px;cursor:pointer;color:var(--text2);font-weight:800;padding:0 3px;border-radius:50%;font-size:12px;}
+  .wdish .x:hover{color:#e23b3b;background:rgba(226,59,59,.12);}
+  .week-add{flex:0 0 auto;width:26px;height:26px;border-radius:50%;border:1px dashed var(--primary);
+    background:transparent;color:var(--primary);font-size:17px;font-weight:800;cursor:pointer;line-height:1;}
+  .week-add:active{transform:scale(.9);}
+
+  /* 排入周菜单弹层 */
+  .wk-mask{position:fixed;inset:0;background:rgba(0,0,0,.42);display:none;align-items:center;justify-content:center;z-index:60;padding:22px;}
+  .wk-mask.show{display:flex;}
+  .wk-picker{background:var(--panel);border-radius:18px;padding:18px;width:100%;max-width:300px;box-shadow:0 20px 50px rgba(0,0,0,.28);}
+  .wk-picker h4{margin:0 0 4px;font-size:15px;color:var(--text);}
+  .wk-picker p{margin:0 0 12px;font-size:12px;color:var(--text2);}
+  .wk-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .wk-opt{border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 8px;text-align:center;
+    cursor:pointer;font-size:13px;font-weight:800;color:var(--text);}
+  .wk-opt small{display:block;font-size:10.5px;color:var(--text2);font-weight:600;margin-top:1px;}
+  .wk-opt.today{border-color:var(--primary);background:var(--accent-soft);color:var(--primary);}
+  .wk-opt:active{transform:scale(.96);}
+  .wk-cancel{margin-top:12px;width:100%;border:none;background:var(--bg);color:var(--text2);
+    border-radius:12px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -287,6 +326,7 @@
         <a class="btn primary" id="mapBtn" target="_blank" rel="noopener">📍 去地图找店</a>
         <button class="btn ghost2" id="rerollBtn">换一个（剩2次）</button>
         <button class="btn ghost2" id="favBtn">⭐ 收藏</button>
+        <button class="btn ghost2" id="weekAddBtn">📅 排入本周</button>
       </div>
     </div>
   </div>
@@ -306,9 +346,26 @@
     <div id="recapBody"></div>
   </div>
 
+  <div class="week" id="weekCard">
+    <div class="week-head">
+      <div class="section-title">本周菜单 <span class="pp-sub">一键安排 7 天</span></div>
+      <button class="week-gen" id="weekGen">🎲 生成整周</button>
+    </div>
+    <div id="weekBody"></div>
+  </div>
+
   <div class="foot">转盘替你做的决定，后悔也怪不到你头上 🐴</div>
 </div>
 <div class="toast" id="toast"></div>
+
+<div class="wk-mask" id="wkMask">
+  <div class="wk-picker">
+    <h4 id="wkTitle">排入本周菜单</h4>
+    <p id="wkSub">选择要安排到哪一天</p>
+    <div class="wk-grid" id="wkGrid"></div>
+    <button class="wk-cancel" id="wkCancel">取消</button>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -413,6 +470,7 @@ const SEEN_KEY = 'eat-seen-v1';
 const CUSTOM_KEY = 'eat-custom-v1';
 const FAV_KEY = 'eat-fav-v1';
 const PREF_KEY = 'eat-pref-v1';
+const WEEK_KEY = 'eat-week-v1';
 
 /* ---------- 状态 ---------- */
 let state = {
@@ -883,6 +941,143 @@ function renderRecap(){
     '<div class="recap-legend">'+segs.map(s=>'<span><i style="background:'+CAT_COLORS[s.c]+'"></i>'+s.c+' '+s.n+' 顿 ('+Math.round(s.n/sum*100)+'%)</span>').join('')+'</div>';
   drawRecapChart($('#recapChart'), segs, sum);
 }
+
+/* ---------- 本周菜单 ---------- */
+const WEEKDAYS = ['周一','周二','周三','周四','周五','周六','周日'];
+function getMonday(ts){
+  const d = new Date(ts); d.setHours(0,0,0,0);
+  const day = (d.getDay()+6)%7; // 周一=0
+  d.setDate(d.getDate()-day);
+  return d.getTime();
+}
+function loadWeek(){ try{return JSON.parse(localStorage.getItem(WEEK_KEY)||'null');}catch(e){return null;} }
+function saveWeek(w){ try{localStorage.setItem(WEEK_KEY,JSON.stringify(w));}catch(e){} }
+function ensureWeek(){
+  const now = Date.now();
+  const mon = getMonday(now);
+  let w = loadWeek();
+  if(!w || w.ws!==mon){
+    if(w && w.days) toast('新的一周开始，本周菜单已清空');
+    w = {ws:mon, days:[[],[],[],[],[],[],[]]};
+    saveWeek(w);
+  }
+  return w;
+}
+// 为某天摇一道（复用 pickWheel 加权偏好/收藏/去重/搭配；避免与传入 exclude 重复）
+function pickOneForDay(dayIdx, exclude){
+  const cands = pickWheel(timeSlot());
+  const base = cands.length ? cands : allFoods();
+  const day = ensureWeek().days[dayIdx] || [];
+  let pool = base.filter(f=> !day.some(d=>d.n===f.n) && (!exclude || !exclude.includes(f.n)));
+  if(pool.length===0) pool = base.filter(f=> !exclude || !exclude.includes(f.n));
+  const pref=loadPref(), fav=loadFav(), seen=loadSeen();
+  const scored = pool.map(f=>{
+    let w=1;
+    const score=(pref.pick[f.n]||0) - 0.6*(pref.skip[f.n]||0);
+    w *= 1 + 0.45*Math.tanh(score);
+    if(fav.includes(f.n)) w *= 1.8;
+    w *= 1/(1+(seen[f.n]||0)*0.7);
+    w *= 0.85 + Math.random()*0.3;
+    return {f,w};
+  }).sort((a,b)=>b.w-a.w);
+  return scored[0] ? scored[0].f : null;
+}
+function addToDay(dayIdx, food){
+  if(!food) return;
+  const w = ensureWeek();
+  w.days[dayIdx].push({n:food.n, e:food.e, p:food.p, cat:catOf(food)});
+  saveWeek(w); renderWeek();
+}
+function removeFromDay(dayIdx, name){
+  const w = ensureWeek();
+  w.days[dayIdx] = w.days[dayIdx].filter(d=>d.n!==name);
+  saveWeek(w); renderWeek();
+}
+// 一键生成整周：7 天各一道，互不相同
+function genWeek(){
+  const w = ensureWeek();
+  const chosen = [];
+  const pref=loadPref(), fav=loadFav(), seen=loadSeen();
+  for(let i=0;i<7;i++){
+    const cands = pickWheel(timeSlot());
+    const base = cands.length ? cands : allFoods();
+    let pool = base.filter(f=> !chosen.includes(f.n) && !w.days[i].some(d=>d.n===f.n));
+    if(pool.length===0) pool = base.filter(f=> !chosen.includes(f.n));
+    const scored = pool.map(f=>{
+      let ww=1;
+      const score=(pref.pick[f.n]||0) - 0.6*(pref.skip[f.n]||0);
+      ww *= 1 + 0.45*Math.tanh(score);
+      if(fav.includes(f.n)) ww *= 1.8;
+      ww *= 1/(1+(seen[f.n]||0)*0.7);
+      ww *= 0.85 + Math.random()*0.3;
+      return {f,ww};
+    }).sort((a,b)=>b.ww-a.ww);
+    if(scored[0]){
+      chosen.push(scored[0].f.n);
+      w.days[i].push({n:scored[0].f.n, e:scored[0].f.e, p:scored[0].f.p, cat:catOf(scored[0].f)});
+    }
+  }
+  saveWeek(w); renderWeek();
+  toast('整周菜单已生成 🍽️');
+}
+function renderWeek(){
+  const w = ensureWeek();
+  const todayIdx = (new Date().getDay()+6)%7;
+  const mon = getMonday(Date.now());
+  const body = $('#weekBody');
+  let html = '';
+  for(let i=0;i<7;i++){
+    const d = new Date(mon); d.setDate(d.getDate()+i);
+    const md = (d.getMonth()+1)+'/'+d.getDate();
+    const dishes = w.days[i] || [];
+    const chips = dishes.length
+      ? dishes.map(dd=>'<span class="wdish">'+dd.e+' <b>'+dd.n+'</b><span class="x" data-d="'+i+'" data-n="'+dd.n+'">×</span></span>').join('')
+      : '<span class="week-empty">还没安排</span>';
+    const badge = i===todayIdx ? '<span class="week-badge">今天</span>' : '';
+    html += '<div class="week-day'+(i===todayIdx?' today':'')+'">'
+      + '<div class="week-dname">'+WEEKDAYS[i]+'<small>'+md+'</small>'+badge+'</div>'
+      + '<div class="week-dishes">'+chips+'</div>'
+      + '<button class="week-add" data-d="'+i+'">＋</button>'
+      + '</div>';
+  }
+  body.innerHTML = html;
+  body.querySelectorAll('.week-add').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const idx = +b.dataset.d;
+      const f = pickOneForDay(idx);
+      if(f){ addToDay(idx,f); toast(WEEKDAYS[idx]+' 安排：'+f.n); }
+      else toast('候选不够，先去调整条件');
+    });
+  });
+  body.querySelectorAll('.wdish .x').forEach(x=>{
+    x.addEventListener('click',()=> removeFromDay(+x.dataset.d, x.dataset.n));
+  });
+}
+// 结果卡「排入本周」弹层
+let wkPickingFood = null;
+function openWeekPicker(food){
+  wkPickingFood = food;
+  $('#wkTitle').textContent = '把「'+food.n+'」排入';
+  const todayIdx = (new Date().getDay()+6)%7;
+  const mon = getMonday(Date.now());
+  const grid = $('#wkGrid');
+  grid.innerHTML = WEEKDAYS.map((nm,i)=>{
+    const d = new Date(mon); d.setDate(d.getDate()+i);
+    const md = (d.getMonth()+1)+'/'+d.getDate();
+    return '<div class="wk-opt'+(i===todayIdx?' today':'')+'" data-d="'+i+'">'+nm+'<small>'+md+'</small></div>';
+  }).join('');
+  grid.querySelectorAll('.wk-opt').forEach(o=>{
+    o.addEventListener('click',()=>{
+      const idx = +o.dataset.d;
+      addToDay(idx, wkPickingFood);
+      closeWeekPicker();
+      toast('已排入'+WEEKDAYS[idx]+'：'+wkPickingFood.n);
+    });
+  });
+  $('#wkMask').classList.add('show');
+}
+function closeWeekPicker(){ $('#wkMask').classList.remove('show'); }
+
 function drawRecapChart(canvas, segs, sum){
   const dpr = window.devicePixelRatio||1;
   const size = 118;
@@ -1075,7 +1270,7 @@ function exportData(){
     app:'what-to-eat', ver:1, exportedAt:new Date().toISOString(),
     custom:loadCustom(), fav:loadFav(), pref:loadPref(),
     history:loadHistory(), log:loadLog(), seen:loadSeen(),
-    sound: soundOn?'1':'0'
+    week:loadWeek(), sound: soundOn?'1':'0'
   };
   try{
     const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
@@ -1098,8 +1293,9 @@ function importData(file){
       if(d.history) saveHistory(d.history);
       if(d.log) saveLog(d.log);
       if(d.seen) saveSeen(d.seen);
+      if(d.week) saveWeek(d.week);
       if(d.sound!==undefined){ soundOn=d.sound==='1'; try{localStorage.setItem('eat-sound',d.sound);}catch(e){} renderSoundBtn(); }
-      renderCustomList(); renderHistory(); renderProfile(); renderRecap(); refreshWheel();
+      renderCustomList(); renderHistory(); renderProfile(); renderRecap(); renderWeek(); refreshWheel();
       toast('备份已恢复 📂');
     }catch(e){ toast('文件格式不对，恢复失败'); }
   };
@@ -1108,6 +1304,16 @@ function importData(file){
 $('#exportBtn').addEventListener('click',exportData);
 $('#importBtn').addEventListener('click',()=>$('#importFile').click());
 $('#importFile').addEventListener('change',function(){ if(this.files&&this.files[0]) importData(this.files[0]); this.value=''; });
+
+/* ---------- 本周菜单事件 ---------- */
+$('#weekGen').addEventListener('click',genWeek);
+$('#weekAddBtn').addEventListener('click',()=>{
+  if(!state.lastResultId){ toast('先转一次再排～'); return; }
+  const f = allFoods().find(o=>o.n===state.lastResultId);
+  if(f) openWeekPicker(f);
+});
+$('#wkCancel').addEventListener('click',closeWeekPicker);
+$('#wkMask').addEventListener('click',e=>{ if(e.target===$('#wkMask')) closeWeekPicker(); });
 
 /* ---------- 初始化 ---------- */
 window.addEventListener('resize',setupCanvas);
@@ -1123,6 +1329,7 @@ function init(){
   updateRerollBtn();
   renderProfile();
   renderRecap();
+  renderWeek();
 }
 init();
 </script>
