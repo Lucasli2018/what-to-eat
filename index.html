@@ -604,6 +604,15 @@ function buildPool(slot){
   }
   // 排除刚选中的（避免立即重复）
   if(state.lastResultId) pool = pool.filter(f=>f.n!==state.lastResultId);
+  // 正餐保障：零食（纯茶点/饮品）不得霸屏，正餐不足时从全天正餐补充
+  const mains = pool.filter(f=>!isSnack(f));
+  const snacks = pool.filter(f=>isSnack(f));
+  if(snacks.length > mains.length){
+    const extra = allFoods().filter(f=>!isSnack(f) && !pool.some(p=>p.n===f.n));
+    for(let i=extra.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [extra[i],extra[j]]=[extra[j],extra[i]]; }
+    const need = Math.min(snacks.length - mains.length, extra.length);
+    pool = mains.concat(snacks, extra.slice(0,need));
+  }
   return pool;
 }
 
@@ -614,6 +623,17 @@ function catOf(f){
   if(f.t.includes('素')) return '素';
   if(f.t.includes('面')) return '主食';
   return '荤';
+}
+/* 纯茶点/饮品（不适合当正餐）：不覆盖午餐或晚餐时段的都算 */
+function isSnack(f){
+  return !(f.tm.includes('lunch') || f.tm.includes('dinner'));
+}
+/* 正餐池：转盘候选 + 过滤零食，兜底回退 */
+function realPool(slot){
+  const cands = pickWheel(slot);
+  let base = cands.length ? cands : allFoods();
+  const mains = base.filter(f=>!isSnack(f));
+  return mains.length ? mains : base;
 }
 /* 上一顿的大类（基于历史第一条） */
 function lastMealCat(){
@@ -638,6 +658,8 @@ function pickWheel(slot){
     w *= 1 + 0.45*Math.tanh(score);
     // 收藏常去
     if(fav.includes(f.n)) w *= 1.8;
+    // 纯茶点/饮品降权：正餐优先
+    if(isSnack(f)) w *= 0.4;
     // 近期吃过降权（比旧逻辑更陡，促进轮换）
     w *= 1/(1+(seen[f.n]||0)*0.7);
     // 搭配：与上一顿同类则降权，促进荤素/类型交替
@@ -1006,10 +1028,9 @@ function ensureWeek(){
   }
   return w;
 }
-// 为某天摇一道（复用 pickWheel 加权偏好/收藏/去重/搭配；避免与传入 exclude 重复）
+// 为某天摇一道（正餐池：复用 pickWheel 加权偏好/收藏/去重/搭配，过滤零食；避免与传入 exclude 重复）
 function pickOneForDay(dayIdx, exclude){
-  const cands = pickWheel(timeSlot());
-  const base = cands.length ? cands : allFoods();
+  const base = realPool('dinner');
   const day = ensureWeek().days[dayIdx] || [];
   let pool = base.filter(f=> !day.some(d=>d.n===f.n) && (!exclude || !exclude.includes(f.n)));
   if(pool.length===0) pool = base.filter(f=> !exclude || !exclude.includes(f.n));
@@ -1036,14 +1057,13 @@ function removeFromDay(dayIdx, name){
   w.days[dayIdx] = w.days[dayIdx].filter(d=>d.n!==name);
   saveWeek(w); renderWeek();
 }
-// 一键生成整周：7 天各一道，互不相同
+// 一键生成整周：7 天各一道正餐，互不相同
 function genWeek(){
   const w = ensureWeek();
   const chosen = [];
   const pref=loadPref(), fav=loadFav(), seen=loadSeen();
   for(let i=0;i<7;i++){
-    const cands = pickWheel(timeSlot());
-    const base = cands.length ? cands : allFoods();
+    const base = realPool('dinner');
     let pool = base.filter(f=> !chosen.includes(f.n) && !w.days[i].some(d=>d.n===f.n));
     if(pool.length===0) pool = base.filter(f=> !chosen.includes(f.n));
     const scored = pool.map(f=>{
@@ -1382,8 +1402,7 @@ function weightedPick(pool, exclude){
   return scored[0] ? scored[0].f : null;
 }
 function assignParty(rerollIdx){
-  const cands = pickWheel(timeSlot());
-  const base = cands.length ? cands : allFoods();
+  const base = realPool('dinner');
   if(rerollIdx===undefined){
     partyList = [];
     const chosen = [];
