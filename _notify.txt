@@ -1,0 +1,10 @@
+领主大人，咪咪已完成 what-to-eat 的 UI/动效增强迭代！
+
+改动（commit 1b97af0，已推送 Gitee master）：
+- 旋转滴答音效 + 结束叮声（可静音，偏好记忆）
+- 移动端震动反馈
+- 结果卡 emoji 回弹动画 + 呼吸光描边
+- 一键生成分享图 PNG
+- 历史记录可点击重看
+
+打开 F:\LLM\what-to-eat\index.html 转一下试试音效吧～
