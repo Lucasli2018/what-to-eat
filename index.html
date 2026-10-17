@@ -286,6 +286,10 @@
 
   <div class="settings" id="settings">
     <div class="field">
+      <div class="field-label">时间段 <b id="slotNow"></b></div>
+      <div class="chips" id="slotChips"></div>
+    </div>
+    <div class="field">
       <div class="field-label">跟谁吃</div>
       <div class="chips" id="sceneChips"></div>
     </div>
@@ -491,6 +495,14 @@ const SCENES = [
   {k:'family',label:'家人',e:'👨‍👩‍👧'},
   {k:'friends',label:'朋友聚会',e:'🍻'}
 ];
+const SLOTS = [
+  {k:'auto',label:'自动',e:'⚡'},
+  {k:'breakfast',label:'早餐',e:'🥣'},
+  {k:'lunch',label:'午餐',e:'🍱'},
+  {k:'tea',label:'下午茶',e:'🍵'},
+  {k:'dinner',label:'晚餐',e:'🍲'},
+  {k:'night',label:'夜宵',e:'🌙'}
+];
 const AVOIDS = [
   {k:'spicy',label:'不吃辣'},
   {k:'seafood',label:'不吃海鲜'},
@@ -518,6 +530,7 @@ const WEEK_KEY = 'eat-week-v1';
 /* ---------- 状态 ---------- */
 let state = {
   scene:'alone',
+  slot:'auto',
   budget:60,
   avoid:[],
   wheelFoods:[],
@@ -558,6 +571,10 @@ function timeSlot(){
   if(h<17) return 'tea';
   if(h<21) return 'dinner';
   return 'night';
+}
+/* 生效时段：手动选择优先，auto 按当前时间 */
+function activeSlot(){
+  return state.slot==='auto' ? timeSlot() : state.slot;
 }
 
 /* ---------- 筛选 ---------- */
@@ -920,7 +937,7 @@ function reasonFor(f){
     else if(last==='海鲜' && cur!=='海鲜') comboTip='换换口味，今天不整海鲜了。';
     else if(last===cur) comboTip='又是'+last+'，连着两顿同口儿，介意就换一个。';
   }
-  return sr[state.scene] + tr[timeSlot()] + comboTip + tail[Math.floor(Math.random()*tail.length)];
+  return sr[state.scene] + tr[activeSlot()] + comboTip + tail[Math.floor(Math.random()*tail.length)];
 }
 
 /* ---------- 历史 ---------- */
@@ -1187,7 +1204,7 @@ rerollBtn.addEventListener('click',()=>{
 
 /* ---------- 刷新转盘候选 ---------- */
 function refreshWheel(){
-  const pool = pickWheel(timeSlot());
+  const pool = pickWheel(activeSlot());
   state.wheelFoods = pool;
   drawWheel();
   if(pool.length===0){
@@ -1205,6 +1222,16 @@ function renderSceneChips(){
     `<span class="chip ${s.k===state.scene?'on':''}" data-k="${s.k}">${s.e} ${s.label}</span>`).join('');
   $('#sceneChips').querySelectorAll('.chip').forEach(c=>{
     c.addEventListener('click',()=>{ state.scene=c.dataset.k; renderSceneChips(); refreshWheel(); });
+  });
+}
+function renderSlotChips(){
+  $('#slotChips').innerHTML = SLOTS.map(s=>{
+    const label = s.k==='auto' ? '自动·'+SLOT_LABEL[timeSlot()] : s.label;
+    return `<span class="chip ${s.k===state.slot?'on':''}" data-k="${s.k}">${s.e} ${label}</span>`;
+  }).join('');
+  $('#slotNow').textContent = state.slot==='auto' ? '' : '（手动：'+SLOT_LABEL[state.slot]+'）';
+  $('#slotChips').querySelectorAll('.chip').forEach(c=>{
+    c.addEventListener('click',()=>{ state.slot=c.dataset.k; renderSlotChips(); refreshWheel(); });
   });
 }
 function renderAvoidChips(){
@@ -1306,10 +1333,10 @@ $('#toggleSettings').addEventListener('click',function(){
   this.classList.toggle('active',open);
 });
 $('#resetBtn').addEventListener('click',()=>{
-  state.scene='alone'; state.budget=60; state.avoid=[]; state.lastResultId=null; state.rerollLeft=MAX_REROLL;
+  state.scene='alone'; state.slot='auto'; state.budget=60; state.avoid=[]; state.lastResultId=null; state.rerollLeft=MAX_REROLL;
   budgetInput.value=60; syncBudget();
   resultEl.classList.remove('show');
-  renderSceneChips(); renderAvoidChips(); refreshWheel(); updateRerollBtn();
+  renderSlotChips(); renderSceneChips(); renderAvoidChips(); refreshWheel(); updateRerollBtn();
   hintEl.textContent='点击中间按钮，让命运做决定';
 });
 $('#clearHistory').addEventListener('click',()=>{
@@ -1448,6 +1475,7 @@ $('#partyMask').addEventListener('click',e=>{ if(e.target===$('#partyMask')) $('
 /* ---------- 初始化 ---------- */
 window.addEventListener('resize',setupCanvas);
 function init(){
+  renderSlotChips();
   renderSceneChips();
   renderAvoidChips();
   syncBudget();
