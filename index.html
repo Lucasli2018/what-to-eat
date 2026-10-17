@@ -118,9 +118,10 @@
     box-shadow:var(--shadow-card);animation:pop .5s cubic-bezier(.2,1.4,.5,1) both;overflow:hidden;
   }
   .result-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;
-    background:linear-gradient(90deg,var(--primary),var(--primary2));}
+    background:linear-gradient(90deg,var(--primary),var(--primary2));animation:breathe 2.4s ease-in-out infinite;}
+  @keyframes breathe{0%,100%{opacity:.55;}50%{opacity:1;}}
   @keyframes pop{from{opacity:0;transform:scale(.88) translateY(8px);}to{opacity:1;transform:none;}}
-  .result-emoji{font-size:56px;line-height:1;margin-bottom:6px;}
+  .result-emoji{font-size:56px;line-height:1;margin-bottom:6px;animation:emojiPop .6s cubic-bezier(.2,1.6,.5,1) both;}
   .result-name{font-size:26px;font-weight:800;margin:2px 0 8px;letter-spacing:1px;}
   .result-meta{display:flex;gap:14px;justify-content:center;align-items:center;font-size:14px;color:var(--text2);margin-bottom:10px;}
   .result-meta b{color:var(--text);font-weight:800;}
@@ -142,6 +143,17 @@
     border-radius:999px;padding:6px 12px;font-size:13px;color:var(--text);box-shadow:var(--shadow-panel);}
   .history-empty{font-size:13px;color:var(--text2);}
   .foot{text-align:center;font-size:11px;color:var(--text2);margin-top:26px;line-height:1.6;}
+
+  /* 增强：旋转脉冲态 / 呼吸光 / emoji弹跳 / 历史可点 / toast / 分享按钮 */
+  .spin-btn.spinning{animation:pulse 1s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 8px 22px rgba(255,107,53,.4),inset 0 2px 4px rgba(255,255,255,.4);}50%{box-shadow:0 8px 32px rgba(255,107,53,.75),inset 0 2px 4px rgba(255,255,255,.4);}}
+  .result-emoji{animation:emojiPop .6s cubic-bezier(.2,1.6,.5,1) both;}
+  @keyframes emojiPop{0%{transform:scale(0) rotate(-22deg);}60%{transform:scale(1.28) rotate(8deg);}100%{transform:scale(1) rotate(0);}}
+  .history-item{cursor:pointer;transition:transform .15s ease,border-color .15s ease;}
+  .history-item:hover{transform:translateY(-1px);border-color:var(--primary);}
+  .toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);background:rgba(45,33,24,.92);color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:80vw;text-align:center;}
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+  .btn.share{background:var(--bg);color:var(--text2);box-shadow:inset 0 0 0 1px var(--line);}
 </style>
 </head>
 <body>
@@ -153,6 +165,7 @@
 
   <div class="toolbar">
     <button class="ghost" id="toggleSettings">⚙️ 调整条件</button>
+    <button class="ghost" id="soundBtn">🔊 音效</button>
     <button class="ghost" id="resetBtn">🔄 重置</button>
   </div>
 
@@ -192,6 +205,7 @@
       <div class="result-actions">
         <a class="btn primary" id="mapBtn" target="_blank" rel="noopener">📍 去地图找店</a>
         <button class="btn ghost2" id="rerollBtn">换一个（剩 2 次）</button>
+        <button class="btn share" id="shareBtn">📤 分享</button>
       </div>
     </div>
   </div>
@@ -203,6 +217,7 @@
 
   <div class="foot">转盘替你做的决定，后悔也怪不到你头上 🐴</div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
 "use strict";
@@ -494,13 +509,61 @@ function textColorFor(hex){
 }
 function trunc(s,n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
 
+/* ---------- 音效 / 震动 / toast ---------- */
+let audioCtx=null, soundOn=true;
+try{ soundOn = localStorage.getItem('eat-sound')!=='0'; }catch(e){}
+function ensureAudio(){
+  if(!soundOn) return;
+  if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; } }
+  if(audioCtx.state==='suspended') audioCtx.resume();
+}
+function blip(freq,vol,dur,type){
+  if(!soundOn||!audioCtx) return;
+  const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type=type||'square'; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol,t+0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t+dur+0.02);
+}
+function tickSound(high){ blip(high?900:640, high?0.13:0.07, 0.06,'square'); }
+function dingSound(){
+  if(!soundOn||!audioCtx) return;
+  const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type='sine'; o.frequency.setValueAtTime(880,t); o.frequency.exponentialRampToValueAtTime(1320,t+0.18);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(0.22,t+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.55);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t+0.6);
+}
+function buzz(){ if(navigator.vibrate){ try{ navigator.vibrate(8); }catch(e){} } }
+function buzzEnd(){ if(navigator.vibrate){ try{ navigator.vibrate([18,40,18]); }catch(e){} } }
+let toastTimer=null;
+function toast(msg){
+  const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),1800);
+}
+function topIndexAt(rot,N){
+  const seg=(Math.PI*2)/N;
+  const k=Math.round(((-Math.PI/2 - seg/2 - rot)/seg));
+  return ((k%N)+N)%N;
+}
+
 /* ---------- 旋转 ---------- */
 function spin(excludeId){
   if(state.spinning) return;
   if(state.wheelFoods.length===0){ refreshWheel(); if(state.wheelFoods.length===0){ hintEl.textContent='条件太苛刻啦，去放宽一下～'; return; } }
   state.spinning=true;
   spinBtn.disabled=true;
+  spinBtn.classList.add('spinning');
+  spinBtn.textContent='转…';
+  ensureAudio();
   if(excludeId) state.lastResultId = excludeId;
+  let lastTickIdx=-1;
   // 重新构建转盘（排除刚选中的）
   refreshWheel();
   if(state.wheelFoods.length===0){ state.spinning=false; spinBtn.disabled=false; hintEl.textContent='条件太苛刻啦，去放宽一下～'; return; }
@@ -525,6 +588,8 @@ function spin(excludeId){
     let p = Math.min(1,(now-t0)/dur);
     const e = 1 - Math.pow(1-p,4); // easeOutQuart
     state.rotation = start + (target-start)*e;
+    const ti = topIndexAt(state.rotation,N);
+    if(ti!==lastTickIdx){ lastTickIdx=ti; tickSound(); buzz(); }
     drawWheel();
     if(p<1) requestAnimationFrame(frame);
     else finish(idx);
@@ -535,6 +600,9 @@ function spin(excludeId){
 function finish(idx){
   state.spinning=false;
   spinBtn.disabled=false;
+  spinBtn.classList.remove('spinning');
+  spinBtn.textContent='转';
+  dingSound(); buzzEnd();
   const f = state.wheelFoods[idx];
   state.lastResultId = f.n;
   showResult(f);
@@ -578,6 +646,27 @@ function reasonFor(f){
   return sr[state.scene] + tr[timeSlot()] + tail[Math.floor(Math.random()*tail.length)];
 }
 
+/* ---------- 分享卡片（离屏 canvas 导出 PNG） ---------- */
+function roundRect(x,X,Y,w,h,r){ x.beginPath(); x.moveTo(X+r,Y); x.arcTo(X+w,Y,X+w,Y+h,r); x.arcTo(X+w,Y+h,X,Y+h,r); x.arcTo(X,Y+h,X,Y,r); x.arcTo(X,Y,X+w,Y,r); x.closePath(); }
+function wrapText(x,text,cx,y,maxW,lh){ const chars=text.split(''); let line='',yy=y; for(const ch of chars){ if(x.measureText(line+ch).width>maxW){ x.fillText(line,cx,yy); line=ch; yy+=lh; } else line+=ch; } x.fillText(line,cx,yy); }
+function makeShareCard(f){
+  const W=600,H=800,c=document.createElement('canvas'); c.width=W; c.height=H;
+  const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,'#ff8a3d'); g.addColorStop(1,'#ff5e3a'); x.fillStyle=g; x.fillRect(0,0,W,H);
+  const pad=46, cw=W-pad*2, cardY=120, cardH=560;
+  roundRect(x,pad,cardY,cw,cardH,28); x.fillStyle='#fffdf9'; x.fill();
+  x.textAlign='center'; x.fillStyle='#2d2118';
+  x.font='150px -apple-system,"PingFang SC",sans-serif'; x.fillText(f.e,W/2,cardY+200);
+  x.font='800 46px -apple-system,"PingFang SC",sans-serif'; x.fillStyle='#ff5e3a'; x.fillText(f.n,W/2,cardY+312);
+  x.font='600 24px -apple-system,"PingFang SC",sans-serif'; x.fillStyle='#9b8a7c';
+  x.fillText('人均 ¥'+f.p+' · '+['不辣','微辣','中辣','重辣'][f.s],W/2,cardY+362);
+  x.font='500 23px -apple-system,"PingFang SC",sans-serif'; x.fillStyle='#2d2118';
+  wrapText(x,reasonFor(f),W/2,cardY+420,cw-70,34);
+  x.font='800 26px -apple-system,"PingFang SC",sans-serif'; x.fillStyle='#ffffff';
+  x.fillText('今天吃啥 · 转盘替你做决定',W/2,H-58);
+  return c.toDataURL('image/png');
+}
+
 /* ---------- 历史 ---------- */
 function loadHistory(){ try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');}catch(e){return [];} }
 function pushHistory(f){
@@ -591,7 +680,17 @@ function renderHistory(){
   const list = $('#historyList');
   const h = loadHistory();
   if(h.length===0){ list.innerHTML = '<span class="history-empty">还没有记录，转一次试试～</span>'; return; }
-  list.innerHTML = h.map(x=>`<span class="history-item">${x.e} ${x.n}</span>`).join('');
+  list.innerHTML = h.map(x=>`<span class="history-item" data-n="${x.n}">${x.e} ${x.n}</span>`).join('');
+  list.querySelectorAll('.history-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const f=FOODS.find(o=>o.n===el.dataset.n);
+      if(!f) return;
+      state.lastResultId=f.n;
+      let hh=loadHistory().filter(o=>o.n!==f.n); hh.unshift({n:f.n,e:f.e});
+      try{localStorage.setItem(HISTORY_KEY,JSON.stringify(hh.slice(0,20)));}catch(e){}
+      showResult(f); toast('再看一眼：'+f.n);
+    });
+  });
 }
 
 /* ---------- 换一个（限次） ---------- */
@@ -671,6 +770,24 @@ $('#clearHistory').addEventListener('click',()=>{
 });
 spinBtn.addEventListener('click',()=>spin(null));
 
+/* ---------- 音效开关 / 分享 绑定 ---------- */
+const soundBtn=$('#soundBtn');
+function renderSoundBtn(){ soundBtn.textContent=soundOn?'🔊 音效':'🔇 静音'; soundBtn.classList.toggle('active',soundOn); }
+soundBtn.addEventListener('click',()=>{
+  soundOn=!soundOn;
+  try{ localStorage.setItem('eat-sound',soundOn?'1':'0'); }catch(e){}
+  renderSoundBtn(); if(soundOn) ensureAudio();
+});
+$('#shareBtn').addEventListener('click',()=>{
+  if(!state.lastResultId) return;
+  const f=FOODS.find(x=>x.n===state.lastResultId);
+  if(!f) return;
+  const url=makeShareCard(f);
+  const a=document.createElement('a'); a.href=url; a.download='今天吃啥-'+f.n+'.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('已生成分享图，保存后即可分享 📤');
+});
+
 /* ---------- 初始化 ---------- */
 window.addEventListener('resize',setupCanvas);
 function init(){
@@ -678,6 +795,7 @@ function init(){
   renderAvoidChips();
   syncBudget();
   renderHistory();
+  renderSoundBtn();
   setupCanvas();
   refreshWheel();
   updateRerollBtn();
