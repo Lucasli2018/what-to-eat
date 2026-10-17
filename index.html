@@ -245,6 +245,29 @@
   .wk-opt:active{transform:scale(.96);}
   .wk-cancel{margin-top:12px;width:100%;border:none;background:var(--bg);color:var(--text2);
     border-radius:12px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;}
+
+  /* 周菜单工具按钮 */
+  .week-tools{display:flex;gap:8px;}
+  .week-clear{background:var(--bg);color:var(--text2);border:none;border-radius:999px;
+    padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:inset 0 0 0 1px var(--line);white-space:nowrap;}
+  .week-clear:hover{color:#e23b3b;box-shadow:inset 0 0 0 1px #e23b3b;}
+  .week-clear:active{transform:scale(.96);}
+
+  /* 聚餐模式 */
+  .party-count{display:flex;align-items:center;justify-content:center;gap:14px;margin:4px 0 14px;}
+  .party-count button{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--bg);
+    color:var(--text);font-size:19px;font-weight:800;cursor:pointer;line-height:1;}
+  .party-count button:active{transform:scale(.92);border-color:var(--primary);color:var(--primary);}
+  .party-count b{font-size:26px;font-weight:800;color:var(--primary);min-width:34px;text-align:center;}
+  .party-count span{font-size:13px;color:var(--text2);font-weight:700;}
+  .party-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px dashed var(--line);}
+  .party-row:first-child{border-top:none;}
+  .party-p{width:38px;flex:0 0 38px;font-size:12.5px;font-weight:800;color:var(--text2);}
+  .party-row .wdish{flex:1;}
+  .party-reroll{flex:0 0 auto;border:none;background:var(--bg);color:var(--primary);border-radius:999px;
+    padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:inset 0 0 0 1px var(--primary);white-space:nowrap;}
+  .party-reroll:active{transform:scale(.94);}
+  .party-empty{font-size:12.5px;color:var(--text2);text-align:center;padding:10px 0;}
 </style>
 </head>
 <body>
@@ -256,6 +279,7 @@
 
   <div class="toolbar">
     <button class="ghost" id="toggleSettings">⚙️ 调整条件</button>
+    <button class="ghost" id="partyBtn">👥 聚餐模式</button>
     <button class="ghost" id="soundBtn">🔊 音效</button>
     <button class="ghost" id="resetBtn">🔄 重置</button>
   </div>
@@ -349,7 +373,10 @@
   <div class="week" id="weekCard">
     <div class="week-head">
       <div class="section-title">本周菜单 <span class="pp-sub">一键安排 7 天</span></div>
-      <button class="week-gen" id="weekGen">🎲 生成整周</button>
+      <div class="week-tools">
+        <button class="week-clear" id="weekClear">🧹 清空</button>
+        <button class="week-gen" id="weekGen">🎲 生成整周</button>
+      </div>
     </div>
     <div id="weekBody"></div>
   </div>
@@ -364,6 +391,22 @@
     <p id="wkSub">选择要安排到哪一天</p>
     <div class="wk-grid" id="wkGrid"></div>
     <button class="wk-cancel" id="wkCancel">取消</button>
+  </div>
+</div>
+
+<div class="wk-mask" id="partyMask">
+  <div class="wk-picker">
+    <h4>👥 聚餐模式</h4>
+    <p>给每个人各摇一道，尽量不重样</p>
+    <div class="party-count">
+      <button id="pcMinus">−</button>
+      <b id="pcNum">4</b>
+      <button id="pcPlus">＋</button>
+      <span>人</span>
+    </div>
+    <button class="btn primary" id="partyGo" style="width:100%;margin-bottom:10px;">🎲 开始分配</button>
+    <div id="partyResult"><div class="party-empty">选好人数，点上面开始分配～</div></div>
+    <button class="wk-cancel" id="partyClose">关闭</button>
   </div>
 </div>
 
@@ -1307,6 +1350,14 @@ $('#importFile').addEventListener('change',function(){ if(this.files&&this.files
 
 /* ---------- 本周菜单事件 ---------- */
 $('#weekGen').addEventListener('click',genWeek);
+$('#weekClear').addEventListener('click',()=>{
+  const w = ensureWeek();
+  const has = w.days.some(d=>d.length>0);
+  if(!has){ toast('本周菜单本来就是空的～'); return; }
+  w.days = [[],[],[],[],[],[],[]];
+  saveWeek(w); renderWeek();
+  toast('本周菜单已清空 🧹');
+});
 $('#weekAddBtn').addEventListener('click',()=>{
   if(!state.lastResultId){ toast('先转一次再排～'); return; }
   const f = allFoods().find(o=>o.n===state.lastResultId);
@@ -1314,6 +1365,66 @@ $('#weekAddBtn').addEventListener('click',()=>{
 });
 $('#wkCancel').addEventListener('click',closeWeekPicker);
 $('#wkMask').addEventListener('click',e=>{ if(e.target===$('#wkMask')) closeWeekPicker(); });
+
+/* ---------- 聚餐模式 ---------- */
+let partyN = 4, partyList = [];
+function weightedPick(pool, exclude){
+  const pref=loadPref(), fav=loadFav(), seen=loadSeen();
+  const scored = pool.filter(f=>!exclude.includes(f.n)).map(f=>{
+    let w=1;
+    const score=(pref.pick[f.n]||0) - 0.6*(pref.skip[f.n]||0);
+    w *= 1 + 0.45*Math.tanh(score);
+    if(fav.includes(f.n)) w *= 1.8;
+    w *= 1/(1+(seen[f.n]||0)*0.7);
+    w *= 0.85 + Math.random()*0.3;
+    return {f,w};
+  }).sort((a,b)=>b.w-a.w);
+  return scored[0] ? scored[0].f : null;
+}
+function assignParty(rerollIdx){
+  const cands = pickWheel(timeSlot());
+  const base = cands.length ? cands : allFoods();
+  if(rerollIdx===undefined){
+    partyList = [];
+    const chosen = [];
+    for(let i=0;i<partyN;i++){
+      const f = weightedPick(base, chosen) || weightedPick(base, []) ;
+      if(!f) break;
+      partyList.push(f); chosen.push(f.n);
+    }
+  }else{
+    const others = partyList.filter((_,i)=>i!==rerollIdx).map(f=>f.n);
+    const f = weightedPick(base, others) || weightedPick(base, []);
+    if(f) partyList[rerollIdx] = f;
+  }
+  renderParty();
+}
+function renderParty(){
+  const el = $('#partyResult');
+  if(partyList.length===0){
+    el.innerHTML = '<div class="party-empty">选好人数，点上面开始分配～</div>';
+    return;
+  }
+  el.innerHTML = partyList.map((f,i)=>
+    '<div class="party-row"><span class="party-p">'+(i+1)+'号</span>'
+    +'<span class="wdish">'+f.e+' <b>'+f.n+'</b></span>'
+    +'<button class="party-reroll" data-i="'+i+'">换</button></div>'
+  ).join('');
+  el.querySelectorAll('.party-reroll').forEach(b=>{
+    b.addEventListener('click',()=>assignParty(+b.dataset.i));
+  });
+}
+$('#partyBtn').addEventListener('click',()=>{
+  partyN=4; partyList=[];
+  $('#pcNum').textContent=partyN;
+  renderParty();
+  $('#partyMask').classList.add('show');
+});
+$('#pcMinus').addEventListener('click',()=>{ partyN=Math.max(2,partyN-1); $('#pcNum').textContent=partyN; });
+$('#pcPlus').addEventListener('click',()=>{ partyN=Math.min(16,partyN+1); $('#pcNum').textContent=partyN; });
+$('#partyGo').addEventListener('click',()=>assignParty(undefined));
+$('#partyClose').addEventListener('click',()=>$('#partyMask').classList.remove('show'));
+$('#partyMask').addEventListener('click',e=>{ if(e.target===$('#partyMask')) $('#partyMask').classList.remove('show'); });
 
 /* ---------- 初始化 ---------- */
 window.addEventListener('resize',setupCanvas);
