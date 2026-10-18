@@ -273,6 +273,37 @@
     padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:inset 0 0 0 1px var(--primary);white-space:nowrap;}
   .party-reroll:active{transform:scale(.94);}
   .party-empty{font-size:12.5px;color:var(--text2);text-align:center;padding:10px 0;}
+
+  /* 聚餐弹框强化：更突出、结果更清晰 */
+  #partyMask{background:rgba(35,20,12,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);}
+  .party-picker{
+    max-width:340px;padding:22px 20px 18px;
+    border:1px solid var(--line);
+    box-shadow:0 26px 60px rgba(120,40,10,.30);
+  }
+  .party-picker h4{font-size:19px;color:var(--primary);margin:0 0 2px;letter-spacing:.5px;}
+  .party-picker p{margin:0 0 14px;font-size:12.5px;}
+  .party-picker .party-count{margin:6px 0 16px;}
+  .party-picker .party-count b{font-size:30px;min-width:40px;}
+  .party-picker .party-count button{width:46px;height:46px;font-size:22px;}
+  #partyResult{max-height:42vh;overflow-y:auto;margin:2px -2px 0;padding:0 2px;}
+  .party-picker .party-row{
+    align-items:center;gap:10px;padding:11px 12px;margin:0 0 8px;
+    background:var(--accent-soft);border:1px solid var(--line);border-radius:14px;
+  }
+  .party-picker .party-row:first-child{border:1px solid var(--line);}
+  .party-picker .party-p{
+    flex:0 0 auto;width:30px;height:30px;border-radius:50%;
+    background:var(--primary);color:#fff;font-size:13px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .party-picker .party-row .wdish{
+    flex:1;display:flex;align-items:center;gap:8px;
+    font-size:15px;font-weight:800;color:var(--text);
+  }
+  .party-picker .party-row .wdish .pe{font-style:normal;font-size:22px;line-height:1;}
+  .party-picker .party-row .wdish b{font-size:15px;font-weight:800;}
+  .party-picker .party-reroll{margin:0;padding:6px 14px;font-size:12px;}
 </style>
 </head>
 <body>
@@ -404,7 +435,7 @@
 </div>
 
 <div class="wk-mask" id="partyMask">
-  <div class="wk-picker">
+  <div class="wk-picker party-picker">
     <h4>👥 聚餐模式</h4>
     <p>给每个人各摇一道，尽量不重样</p>
     <div class="party-count">
