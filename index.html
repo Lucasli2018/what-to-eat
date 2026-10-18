@@ -227,6 +227,11 @@
     color:var(--text);border-radius:999px;padding:3px 4px 3px 9px;font-size:12px;font-weight:700;white-space:nowrap;}
   .wdish .x{margin-left:1px;cursor:pointer;color:var(--text2);font-weight:800;padding:0 3px;border-radius:50%;font-size:12px;}
   .wdish .x:hover{color:#e23b3b;background:rgba(226,59,59,.12);}
+  .wdish.done{opacity:.5;}
+  .wdish.done b{text-decoration:line-through;}
+  .wdish .ok{margin-left:1px;cursor:pointer;color:var(--text2);font-weight:800;padding:0 3px;border-radius:50%;font-size:11px;line-height:1;}
+  .wdish .ok:hover{color:#2e9e5b;background:rgba(46,158,91,.12);}
+  .wdish .ok.on{color:#2e9e5b;}
   .week-add{flex:0 0 auto;width:26px;height:26px;border-radius:50%;border:1px dashed var(--primary);
     background:transparent;color:var(--primary);font-size:17px;font-weight:800;cursor:pointer;line-height:1;}
   .week-add:active{transform:scale(.9);}
@@ -945,8 +950,8 @@ function loadHistory(){ try{return JSON.parse(localStorage.getItem(HISTORY_KEY)|
 function saveHistory(h){ try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h));}catch(e){} }
 function loadLog(){ try{return JSON.parse(localStorage.getItem(LOG_KEY)||'[]');}catch(e){return [];} }
 function saveLog(a){ try{localStorage.setItem(LOG_KEY,JSON.stringify(a.slice(-300)));}catch(e){} }
-function pushHistory(f){
-  const rec = {n:f.n, e:f.e, p:f.p, cat:catOf(f), at:Date.now()};
+function pushHistory(f, src){
+  const rec = {n:f.n, e:f.e, p:f.p, cat:catOf(f), at:Date.now(), src:src||'spin'};
   let h = loadHistory().filter(x=>x.n!==f.n);
   h.unshift(rec); h = h.slice(0,20);
   saveHistory(h);
@@ -1066,12 +1071,38 @@ function pickOneForDay(dayIdx, exclude){
 function addToDay(dayIdx, food){
   if(!food) return;
   const w = ensureWeek();
-  w.days[dayIdx].push({n:food.n, e:food.e, p:food.p, cat:catOf(food)});
+  w.days[dayIdx].push({n:food.n, e:food.e, p:food.p, cat:catOf(food), done:false});
   saveWeek(w); renderWeek();
 }
 function removeFromDay(dayIdx, name){
   const w = ensureWeek();
+  const dish = w.days[dayIdx].find(d=>d.n===name);
+  if(dish && dish.done) removeWeekHistory(name);
   w.days[dayIdx] = w.days[dayIdx].filter(d=>d.n!==name);
+  saveWeek(w); renderWeek();
+}
+/* 打卡联动「最近吃过/复盘」：仅回滚同源（src=week）记录，不动真实历史 */
+function removeWeekHistory(name){
+  let h = loadHistory().filter(x=>!(x.n===name && x.src==='week'));
+  saveHistory(h);
+  let log = loadLog().filter(x=>!(x.n===name && x.src==='week'));
+  saveLog(log);
+  renderHistory(); renderRecap();
+}
+function toggleDone(dayIdx, name){
+  const w = ensureWeek();
+  const dish = w.days[dayIdx].find(d=>d.n===name);
+  if(!dish) return;
+  if(dish.done){
+    dish.done = false;
+    removeWeekHistory(name);
+    toast('取消打卡：'+name);
+  }else{
+    dish.done = true;
+    const f = allFoods().find(o=>o.n===name);
+    if(f) pushHistory(f, 'week');
+    toast('已打卡：'+name+' 🍽️');
+  }
   saveWeek(w); renderWeek();
 }
 // 一键生成整周：7 天各一道正餐，互不相同
@@ -1094,7 +1125,7 @@ function genWeek(){
     }).sort((a,b)=>b.ww-a.ww);
     if(scored[0]){
       chosen.push(scored[0].f.n);
-      w.days[i].push({n:scored[0].f.n, e:scored[0].f.e, p:scored[0].f.p, cat:catOf(scored[0].f)});
+      w.days[i].push({n:scored[0].f.n, e:scored[0].f.e, p:scored[0].f.p, cat:catOf(scored[0].f), done:false});
     }
   }
   saveWeek(w); renderWeek();
@@ -1111,7 +1142,9 @@ function renderWeek(){
     const md = (d.getMonth()+1)+'/'+d.getDate();
     const dishes = w.days[i] || [];
     const chips = dishes.length
-      ? dishes.map(dd=>'<span class="wdish">'+dd.e+' <b>'+dd.n+'</b><span class="x" data-d="'+i+'" data-n="'+dd.n+'">×</span></span>').join('')
+      ? dishes.map(dd=>'<span class="wdish'+(dd.done?' done':'')+'">'+dd.e+' <b>'+dd.n+'</b>'
+          +'<span class="ok'+(dd.done?' on':'')+'" data-d="'+i+'" data-n="'+dd.n+'">'+(dd.done?'✓':'○')+'</span>'
+          +'<span class="x" data-d="'+i+'" data-n="'+dd.n+'">×</span></span>').join('')
       : '<span class="week-empty">还没安排</span>';
     const badge = i===todayIdx ? '<span class="week-badge">今天</span>' : '';
     html += '<div class="week-day'+(i===todayIdx?' today':'')+'">'
@@ -1131,6 +1164,9 @@ function renderWeek(){
   });
   body.querySelectorAll('.wdish .x').forEach(x=>{
     x.addEventListener('click',()=> removeFromDay(+x.dataset.d, x.dataset.n));
+  });
+  body.querySelectorAll('.wdish .ok').forEach(o=>{
+    o.addEventListener('click',()=> toggleDone(+o.dataset.d, o.dataset.n));
   });
 }
 // 结果卡「排入本周」弹层
